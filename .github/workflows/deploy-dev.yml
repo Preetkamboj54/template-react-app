@@ -1,0 +1,53 @@
+name: Deploy to AWS S3 (Dev)
+
+on:
+  push:
+    branches:
+      - dev          # Only runs when you push to dev branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest    # GitHub gives us a free Linux machine
+
+    steps:
+
+      # Step 1 - Download your code onto the Linux machine
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2 - Install Node.js on the Linux machine
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # Step 3 - Run npm install
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 4 - Run npm run build
+      - name: Build React app
+        run: npm run build
+        env:
+          CI: false       # Prevents warnings from failing the build
+
+      # Step 5 - Connect to AWS using your secrets
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # Step 6 - Upload build folder to S3
+      - name: Deploy to S3
+        run: |
+          aws s3 sync ./build s3://${{ secrets.AWS_S3_BUCKET }} \
+            --delete \
+            --cache-control "max-age=31536000,public" \
+            --exclude "index.html"
+
+          # Upload index.html separately with no-cache
+          aws s3 cp ./build/index.html s3://${{ secrets.AWS_S3_BUCKET }}/index.html \
+            --cache-control "no-cache,no-store,must-revalidate"
